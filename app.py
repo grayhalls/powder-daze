@@ -57,10 +57,7 @@ with st.form("entry_form", clear_on_submit=False):
     start_date = dts['start_date'] 
     max_date = dts['max_date']
     start_date, end_date = st.date_input("Select date range", (start_date, end_date))
-    # col1, col2 = st.columns(2)
-    # start_date = col1.date_input("Start Date", value = dt.date(2023,1,1))
-    # max_date = dt.date.today()- delta(days=7)
-    # end_date = col2.date_input("End Date", value = max_date)
+
     # error msgs
     if start_date > end_date:
         st.error('Error: End date must fall after start date.')
@@ -70,27 +67,24 @@ with st.form("entry_form", clear_on_submit=False):
     "---"
 # --- SELECT RD ---    
     rd_info = pd.read_csv('rd_info.csv')[['rd', 'latitude', 'longitude']]
+    rd_locs = {site:{'lat': lat, 'lng': lng} for site,lat,lng in rd_info.values}
     rds = rd_info['rd'].values.tolist()
-    # rd_select = st.selectbox("Select a RD:", rds, key=str)
-    rd_select = st.multiselect("Select a RD:", rds, key=str)
+    rd_select = st.selectbox("Select a RD:", rds, key=str)
     
     submitted = st.form_submit_button("Submit")
  
 
-# site --> lat, lng build dict up above and just query the dict
-def site_lat_lng(site):
-    rd_locs = {site:{'lat': lat, 'lng': lng} for site,lat,lng in rd_info.values}
-    return rd_locs[site]['lat'], rd_locs[site]['lng']
-    
 
-def f(start_date, end_date, lat, lng): 
+def f(start_date, end_date, rd_select): 
+    lat,lng = rd_locs[rd_select]['lat'], rd_locs[rd_select]['lng']
+
     # call the api - api is updated daily but with a 5 day delay
-    r = requests.get(f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lng}&start_date={start_date}&end_date={end_date}&daily=snowfall_sum,rain_sum,apparent_temperature_min,apparent_temperature_max&timezone=auto&precipitation_unit=inch&temperature_unit=fahrenheit")
+    r = requests.get(f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lng}&start_date={start_date}&end_date={end_date}&daily=snowfall_sum,rain_sum,temperature_2m_min,temperature_2m_max&timezone=auto&precipitation_unit=inch&temperature_unit=fahrenheit")
     res = r.json()
     return pd.DataFrame({
             'date': res['daily']['time'], 
-            'snowfall': [round(snow,1) for snow in res['daily']['snowfall_sum']],
-            'rainfall': [round(rain,1) for rain in res['daily']['rain_sum']] ,
+            'snowfall': res['daily']['snowfall_sum'],
+            'rainfall': res['daily']['rain_sum'],
             'max_temp': res['daily']['temperature_2m_max'],
             'min_temp':res['daily']['temperature_2m_min']
         })
@@ -98,13 +92,13 @@ def f(start_date, end_date, lat, lng):
 if submitted:   
     st.success("Data saved!")
 
-    lat, lng = site_lat_lng(rd_select)
-    data = f(start_date, end_date, lat, lng)
-    data['snowfall'] = data['snowfall']/2.54
-# for metric in data['daily']: 
-    # st.write(metric, len(data['daily'][metric]))
-    st.write(data)
+    data = f(start_date, end_date, rd_select)
 
+    data['snowfall'] = data['snowfall']/2.54
+    data['snowfall'] = round(data['snowfall'],1)
+    data['rainfall'] = round(data['rainfall'],1)
+
+    st.dataframe(data,1000)
 
     st.download_button(
         label='Download data',
@@ -113,39 +107,5 @@ if submitted:
         mime='text/csv'
         )
 
-# #----NAVIGATION MENU ---
-# selected = option_menu(
-#     menu_title = None,
-#     option=["Data Entry", "Data Visualization"],
-#     icons=["pencil-fill", "bar-chart-fill"], #https://icons.getbootstrap.com/
-#     orientation="horizontal"
-# )
-
-# # --- INPUT & SAVE PERIODS ---
-# if selected == "Data Entry":
-#     st.header(f"Data Entry in {currency}")
-#     with st.form("entry_form", clear_on_submit=True):
-#         col1, col2 = st.columns(2)
-#         col1.selectbox("Select Month:", months, key="month")
-#         col2.selectbox("Select Year:", years, key="year")
-
-#         "---"
-#         with st.expander("Income"):
-#             for income in incomes:
-#                 st.number_input(f"{income}:", min_value=0, format="%i", step=10, key=income)
-#         with st.expander("Expenses"):
-#             for expense in expenses:
-#                 st.number_input(f"{expense}:", min_value=0, format="%i", step=10, key=expense)
-#         with st.expander("Comment"):
-#             comment = st.text_area("", placeholder="Enter a comment here ...")
-
-        
-#         "---"
-#         submitted = st.form_submit_button("Save Data")
-#         if submitted:
-#             period = str(st.session_state["year"]) + "_" + str(st.session_state["month"])
-#             incomes = {income: st.session_state[income] for income in incomes}
-#             expenses = {expense: st.session_state[expense] for expense in expenses}
-#             st.success("Data saved!")
 
 
