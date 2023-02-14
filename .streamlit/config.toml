@@ -1,4 +1,7 @@
 [theme]
+# The preset Streamlit theme that your custom theme inherits from. One of "light" or "dark".
+base = "dark"
+
 # Primary accent color for interactive elements.
 primaryColor = "#d33682"
 
