@@ -1,0 +1,6 @@
+altair==4.2.2
+pandas==1.4.1
+python_dateutil==2.8.2
+requests==2.27.1
+streamlit==1.18.0
+streamlit_option_menu==0.3.2
