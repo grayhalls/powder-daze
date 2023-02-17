@@ -57,26 +57,25 @@ def load_pricing_data():
 @st.cache_data
 def flat_monthly_rates(site):
     pricing_data = load_pricing_data()
-    dets = pricing_data['pricing_dets']
-    flat = dets.get(site,{}).get('flat_cost', 'N/A')
-    if not math.isnan(flat):
-        return True
-    else:
-        return False 
+    if site in pricing_data['pricing_dets']:
+        flat = pricing_data['pricing_dets'][site]['flat_cost']
+        if not math.isnan(flat):
+            return True
+    return False
+
     
 @st.cache_data
-def find_price(site,inch):
-    if inch < 1:
+def find_price(site, inch):
+    flat = flat_monthly_rates(site)
+    pricing_data = load_pricing_data()
+    if flat == True:
         return 0
     else:
-        flat = flat_monthly_rates(site)
-        pricing_data = load_pricing_data()
-        if flat == True:
-            return 0
+        inch_price = pricing_data['inch_pricing']
+        if site in inch_price and str(inch) in inch_price[site]:
+            return inch_price[site][str(inch)]
         else:
-            inch_price = pricing_data['inch_pricing']
-            price = inch_price.get(site,{}).get(inch, 'N/A')
-            return price
+            return '0'
 
 @st.cache_data
 def salt_price(site,inch):

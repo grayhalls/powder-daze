@@ -38,10 +38,11 @@ def password_authenticate(pwsd):
     else:
         return False
 
+def blank(): return st.write('') 
 
 # --- API function ---
 @st.cache_data
-def f(start_date, end_date, rd_select, elements_select):
+def grab_weather(start_date, end_date, rd_select, elements_select):
     rd_data = load_rd_data()
     rd_locs = rd_data['rd_loc_dict']
     lat, lng = rd_locs[rd_select]['lat'], rd_locs[rd_select]['lng']
@@ -65,12 +66,15 @@ def f(start_date, end_date, rd_select, elements_select):
     return pd.DataFrame(df_dict)
 
 def add_pricing(start_date,end_date,rd_select):
-    data= f(start_date,end_date,rd_select,'all')
+    data= grab_weather(start_date,end_date,rd_select,'all')
     data['snow'] = round(data['snow']/2.54, 1)
     data['inches_snow'] = (data['snow']).astype(int)
     plow_prices = []
     for i in data['inches_snow']:
-        plow_price = find_price(rd_select,i)
+        if i < 1:
+            plow_price=0
+        else:
+            plow_price = find_price(rd_select,i)
         plow_prices.append(plow_price)
 
     data['plow price'] = plow_prices
@@ -103,9 +107,6 @@ if selected == "Individual RD Breakdown":
             st.error('Error: Data is not available more recently than a week ago.')
 
         # ----- SELECT RD -----    
-        # rd_info = pd.read_csv('rd_info.csv')
-        # rd_locs = {site:{'lat': lat, 'lng': lng} for site,lat,lng in rd_info.values}
-        # rds = rd_info['rd'].values.tolist()
         rd_data = load_rd_data()
         rd_select = col2.selectbox("Select a RD:", rd_data['rds'], key=str)
         
@@ -128,7 +129,7 @@ if selected == "Individual RD Breakdown":
             if password_valid:  
                 st.success("Valid Password")
 
-                data = f(start_date, end_date, rd_select, elements_select)
+                data = grab_weather(start_date, end_date, rd_select, elements_select)
 
                 if 'snow' in elements_select or 'all' in elements_select:
                     data['snow'] = round(data['snow']/2.54, 1)
@@ -151,6 +152,7 @@ if selected == "Individual RD Breakdown":
                     days_over_inch = len(chart_data[chart_data['snow']>1])
 
                     snow_dataframe = add_pricing(start_date, end_date, rd_select)
+                    plow_cost = snow_dataframe['plow price'].sum()
                 else:
                     chart_data = data[['date', elements_select]]
                     y_axis_label = ' '.join([e.capitalize() for e in elements_select])
@@ -162,14 +164,17 @@ if selected == "Individual RD Breakdown":
 
                 "---"
                 st.altair_chart(chart, theme="streamlit", use_container_width=True )
+                
                 if 'snow' in elements_select or 'all' in elements_select:
-                    col1, col2, col3, col4, col5, col6 = st.columns(6)
-                    col3.metric("Plow Days", f"{days_over_inch}")
-                    col4.metric("Total Snowfall", f"{total_snow}")
-
-                    st.dataframe(snow_dataframe,1000)
+                    col1, col2, col3, col4, col5 = st.columns(5)
+                    col2.metric("Plow Days", f"{days_over_inch}")
+                    col3.metric("Total Snowfall", f"{total_snow}")
+                    col4.metric("Total Plow Cost", f"{plow_cost}")
+                    blank() 
+                    table = st.dataframe(snow_dataframe,1000)
                 else:
-                    st.dataframe(data,1000)
+                    blank()
+                    table =st.dataframe(data,1000)
 
                 st.download_button(
                     label='Download data',
