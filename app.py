@@ -77,9 +77,19 @@ def add_pricing(start_date,end_date,rd_select):
             plow_price = find_price(rd_select,i)
         plow_prices.append(plow_price)
 
+    est_salt =[]
+    for i in range(len(plow_prices)):
+        if plow_prices[i] == 0:
+            est_salt.append(0)
+        else:
+            salt = salt_price(rd_select, data['inches_snow'][i])
+            est_salt.append(salt)
+
     data['plow price'] = plow_prices
+    data['est salt'] = est_salt
     data=data.drop(columns=['inches_snow'])
-    return data 
+    return data
+
 
     # --- NAVIGATION MENU ---
 selected = option_menu(
@@ -112,7 +122,7 @@ if selected == "Individual RD Breakdown":
         
         element_keys = {'snow': 'snowfall_sum', 'rain': 'rain_sum', 'high temp': 'temperature_2m_max', 'low temp': 'temperature_2m_min', 'hours of precipitation': 'precipitation_hours'}
         elements = list(element_keys.keys())
-        elements.insert(0,'all')
+        # elements.insert(0,'all')
         
         elements_select = col3.selectbox("Select weather data type:", elements)
         
@@ -131,12 +141,10 @@ if selected == "Individual RD Breakdown":
 
                 data = grab_weather(start_date, end_date, rd_select, elements_select)
 
-                if 'snow' in elements_select or 'all' in elements_select:
+                if 'snow' in elements_select:
                     data['snow'] = round(data['snow']/2.54, 1)
-                if 'rain' in elements_select:
-                    data['rain'] = round(data['rain'], 1)
-                
-                if 'snow' in elements_select or 'all' in elements_select:
+                    
+                if 'snow' in elements_select:
                     chart_data = data[['date', 'snow']]
                     y_axis_label = 'Snowfall (in)'
                     bars = alt.Chart(chart_data).mark_bar(width=18).encode(
@@ -149,10 +157,19 @@ if selected == "Individual RD Breakdown":
                     chart = (bars + line).interactive()
                     total_snow = data['snow'].sum()
                     total_snow = round(total_snow, 2)
-                    days_over_inch = len(chart_data[chart_data['snow']>1])
-
                     snow_dataframe = add_pricing(start_date, end_date, rd_select)
-                    plow_cost = snow_dataframe['plow price'].sum()
+                    flat_rate = flat_monthly_rates(rd_select) 
+
+                    if flat_rate == True:
+                        snow_dataframe=snow_dataframe.drop(columns = ['plow price'])
+                        days_over_inch = len(chart_data[chart_data['snow']>1])
+                        plow_cost = find_price(rd_select, 1)
+                    else:
+                        days_over_inch = len(snow_dataframe[snow_dataframe['plow price']>0])
+                        plow_cost = snow_dataframe['plow price'].sum()
+
+                    salt_cost = snow_dataframe['est salt'].sum()
+
                 else:
                     chart_data = data[['date', elements_select]]
                     y_axis_label = ' '.join([e.capitalize() for e in elements_select])
@@ -165,11 +182,18 @@ if selected == "Individual RD Breakdown":
                 "---"
                 st.altair_chart(chart, theme="streamlit", use_container_width=True )
                 
-                if 'snow' in elements_select or 'all' in elements_select:
-                    col1, col2, col3, col4, col5 = st.columns(5)
-                    col2.metric("Plow Days", f"{days_over_inch}")
-                    col3.metric("Total Snowfall", f"{total_snow}")
-                    col4.metric("Total Plow Cost", f"{plow_cost}")
+                if 'snow' in elements_select: 
+                    col1, col2, col3, col4 = st.columns(4)
+                    col4.metric("Plow Days", f"{days_over_inch}")
+                    col3.metric("Total Snowfall", f"{total_snow} in")
+                    
+                    if flat_rate == False:
+                        col1.metric("Total Plow Cost", f"${plow_cost}")
+                    else:
+                        col1.metric("Flat Rate for the Month", f"${plow_cost}")
+
+                    col2.metric("Est Salt", f"${salt_cost}")
+
                     blank() 
                     table = st.dataframe(snow_dataframe,1000)
                 else:
@@ -182,14 +206,17 @@ if selected == "Individual RD Breakdown":
                     file_name=f'{rd_select}_{str(start_date)}_{str(end_date)}_weather_data.csv',
                     mime='text/csv'
                     )
-
+                vendor_dets = load_pricing_data()
+                vendor = vendor_dets['pricing_dets'][rd_select]['vendor']
+                notes = vendor_dets['pricing_dets'][rd_select]['notes']
+                st.markdown(f"The vendor is {vendor}.")
+                st.markdown(f"Additional Notes: {notes}.")
             else: 
                 st.error("Invalid Password") 
                 st.markdown("Contact Holly if you're having password issues")
 
 
 if selected == "Snowfall Summary":
-    # st.header(f"Select a date range")
     with st.form("entry_form", clear_on_submit=False):
         dts = date_pull() 
         end_date = dts['end_date'] 

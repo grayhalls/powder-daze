@@ -38,10 +38,13 @@ def load_rd_data(exclude_region=None):
 @st.cache_data
 def load_pricing_data():
     pricing = pd.read_csv('snow_removal_pricing.csv')
-    pricing = pricing.replace('N/A', 'NaN').replace('N/A ', 'NaN').replace('.*/Bag', 'NaN', regex=True).replace('.*/bag', 'NaN', regex=True)
+    pricing = pricing.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+    pricing = pricing.rename(columns=lambda x: x.strip())
+    pricing = pricing.replace('N/A', 'NaN').replace('$-', '0')
+   
     pricing = pricing.astype({col: float for col in pricing.columns[2:16]})
 
-    inch_pricing = pricing.drop(columns=['Region', 'Salting ', 'Flat Monthly Cost ', 'Unnamed: 17', 'Vendor ', 'Notes'])
+    inch_pricing = pricing.drop(columns=['Region', 'Salting', 'Flat Monthly Cost', 'Unnamed: 17', 'Vendor', 'Notes'])
     dict_list = []
     for _, row in inch_pricing.iterrows():
         site = row['RD']
@@ -49,8 +52,8 @@ def load_pricing_data():
         dict_list.append({site: inch_dict})
     inch_pricing_dict = {k: v for d in dict_list for k, v in d.items()}
  
-    pricing_dets = pricing[['RD', 'Salting ', 'Flat Monthly Cost ', 'Vendor ', 'Notes']]
-    pricing_dets = {site:{'salt':salt, 'flat_cost': flat_cost, 'vendor': vendor, 'notes': notes} for site, salt,flat_cost,vendor,notes in pricing_dets.values}
+    pricing_dets = pricing[['RD', 'Salting', 'Flat Monthly Cost', 'Vendor', 'Notes']]
+    pricing_dets = {site:{'salt':salt, 'flat_cost': flat_cost, 'vendor': vendor, 'notes': notes} for site, salt,flat_cost,vendor,notes in pricing_dets.to_dict('split')['data']}
  
     return {'inch_pricing':inch_pricing_dict, 'pricing_dets': pricing_dets}
 
@@ -69,13 +72,13 @@ def find_price(site, inch):
     flat = flat_monthly_rates(site)
     pricing_data = load_pricing_data()
     if flat == True:
-        return 0
+        return pricing_data['pricing_dets'][site]['flat_cost']
     else:
         inch_price = pricing_data['inch_pricing']
         if site in inch_price and str(inch) in inch_price[site]:
             return inch_price[site][str(inch)]
         else:
-            return '0'
+            return 0
 
 @st.cache_data
 def salt_price(site,inch):
