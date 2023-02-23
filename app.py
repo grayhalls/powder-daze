@@ -215,6 +215,11 @@ if selected == "Snowfall Summary":
         rd_values.insert(1, 'Central')
         rd_select = col2.multiselect("Select a Region or multiple RDs:", rd_values, key=str)
 
+        if rd_select == ['North'] :
+            rd_select = [rd for rd, region in zip(rd_data['rds'], rd_data['regions']) if region == 'North']
+        elif rd_select == ['Central']:
+            rd_select = [rd for rd, region in zip(rd_data['rds'], rd_data['regions']) if region == 'Central']
+        
         "---"
         # -----INPUT PASSWORD-----
         # pc_password = st.text_input("Password") 
@@ -226,7 +231,9 @@ if selected == "Snowfall Summary":
             # password_valid = password_authenticate(pc_password) 
             
             # if password_valid:  
-                st.success("Valid Password")
+                st.success("Under Construction")
 
-                # data(start_date, end_date, 
+                # for i in rd_select:
+                #     data = grab_weather(start_date, end_date, i, 'all')
+
 

@@ -37,7 +37,7 @@ def load_rd_data(exclude_region=None):
 
 @st.cache_data
 def load_pricing_data():
-    pricing = pd.read_excel('snow_removal_pricing.xlsx')
+    pricing = pd.read_csv('snow_removal_pricing.csv')
     pricing = pricing.replace('N/A', 'NaN').replace('N/A ', 'NaN').replace('.*/Bag', 'NaN', regex=True).replace('.*/bag', 'NaN', regex=True)
     pricing = pricing.astype({col: float for col in pricing.columns[2:16]})
 
