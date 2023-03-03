@@ -17,14 +17,14 @@ st.title(page_title + " " + page_icon)
 
 
 # --- HIDE STREAMLIT STYLE ---
-hide_st_style = """
-            <style>
-            #MainMenu {visibility: hidden;}
-            footer {visibility: hidden;}
-            header {visibility: hidden;}
-            </style>
-            """
-st.markdown(hide_st_style, unsafe_allow_html=True)
+# hide_st_style = """
+#             <style>
+#             #MainMenu {visibility: hidden;}
+#             footer {visibility: hidden;}
+#             header {visibility: hidden;}
+#             </style>
+#             """
+# st.markdown(hide_st_style, unsafe_allow_html=True)
 
 
 pricing_data = load_pricing_data()
@@ -55,7 +55,7 @@ def find_price(site, inch, pricing_data):
         else:
             return 0
 # --- API function ---
-@st.cache_data
+#@st.cache_data
 def grab_weather(start_date, end_date, rd_select, elements_select, rd_data):
     rd_locs = rd_data['rd_loc_dict']
     lat, lng = rd_locs[rd_select]['lat'], rd_locs[rd_select]['lng']
@@ -80,8 +80,13 @@ def grab_weather(start_date, end_date, rd_select, elements_select, rd_data):
        
 @st.cache_data
 def add_pricing(weather_dict, rd_select):
-    inches_snow = [int(round(i,0)) for i in weather_dict['snow']]
-    data = {'date': weather_dict['date'], 'snow': weather_dict['snow'], 'rain': weather_dict['rain'],'high temp': weather_dict['high temp'], 'low temp': weather_dict['low temp'], 'hours of precipitation': weather_dict['hours of precipitation']}
+    inches_snow = [int(round(i,0)) for i in weather_dict[rd_select].get('snow', [])]
+    data = {'date': weather_dict[rd_select].get('date', []), 'snow': weather_dict[rd_select].get('snow', []), 
+            'rain': weather_dict[rd_select].get('rain', []),
+            'high temp': weather_dict[rd_select].get('high temp', []), 
+            'low temp': weather_dict[rd_select].get('low temp', []), 
+            'hours of precipitation': weather_dict[rd_select].get('hours of precipitation', [])}
+    
     # Calculate plow prices and estimated salt usage using vectorized functions
     vectorized_find_price = np.vectorize(find_price)
     plow_prices = np.where(np.array(inches_snow) < 1, 0, vectorized_find_price(rd_select, np.array(inches_snow), pricing_data))
@@ -93,10 +98,11 @@ def add_pricing(weather_dict, rd_select):
 
     return data
 
-@st.cache_data
+#@st.cache_data
 def all_weather(start_date, end_date, rds_select):
-    weather ={}
-    for site in rds_select:
+    weather = {}
+    for site in rds_select: 
+        print(site)
         weather_dict = grab_weather(start_date, end_date, site, 'snow', rd_data)
         weather[site] = {'date': weather_dict['date'], 'snow': weather_dict['snow']}
 
@@ -107,24 +113,33 @@ def all_weather(start_date, end_date, rds_select):
 def aggregate(pricing_data, rd_select, weather):
     results = []
     for location in rd_select:
-        snow_data = weather[location]['snow']
-        
-        if pricing_data['pricing_dets'][location]['flat']:
-            days_over_inch = sum(1 for snow in snow_data if snow > 1)
-            plow_cost = find_price(location, 1, pricing_data)
-        elif snow_data.isnull().any():
-            days_over_inch = sum(1 for snow in snow_data if snow > 1)
-            plow_cost = 0 #data['plow price'].sum()
-        else:
-            pricing = add_pricing(weather, location)
-            days_over_inch = len(pricing[pricing['plow price']>0])
-            plow_cost = pricing['plow price'].sum()
+        snow_data = weather[location]['snow']  
 
-        salt_cost = data['est salt'].sum()
-        total_cost = salt_cost + plow_cost
-        total_snow = data['snow'].sum()
-        total_snow = round(total_snow, 2)
-        results.append({'RD':location, 'plow cost': plow_cost, 'days over inch': days_over_inch, 'salt cost': salt_cost, 'total cost': total_cost, 'total snow': total_snow})
+        if location in pricing_data['pricing_dets']:
+        
+            if pricing_data['pricing_dets'][location]['flat']:
+                days_over_inch = sum(1 for snow in snow_data if snow > 1)
+                plow_cost = find_price(location, 1, pricing_data)  
+                total_cost = plow_cost
+                salt_cost = np.nan
+            # elif snow_data.isnull().any():
+            #     days_over_inch = sum(1 for snow in snow_data if snow > 1)
+            #     plow_cost = 0 #data['plow price'].sum()
+            else:
+                pricing = add_pricing(weather, location) 
+                days_over_inch = len([x for x in pricing['plow price'] if x >0])
+                plow_cost = sum(pricing['plow price'])
+
+                salt_cost = sum(pricing['est salt'])
+                total_cost = salt_cost + plow_cost 
+            
+            #print(weather, type(weather))
+            total_snow = round(sum(weather[location]['snow']), 2)
+            results.append({'RD':location, 'plow cost': plow_cost, 
+                            'days over inch': days_over_inch, 
+                            'salt cost': salt_cost, 
+                            'total cost': total_cost, 
+                            'total snow': total_snow})
 
     return pd.DataFrame(results)
 
@@ -299,15 +314,17 @@ if selected == "Snowfall Summary":
 
         submitted = st.form_submit_button("Submit")
     
-        if submitted:  
+    if submitted:  
+        
+        password_valid = password_authenticate(pc_password) 
+        
+        if password_valid:  
+            st.success('   Under Construction', icon="❄️")
             
-            password_valid = password_authenticate(pc_password) 
-            
-            if password_valid:  
-                st.success('   Under Construction', icon="❄️")
-                    
-                # weather = all_weather(start_date, end_date, rd_select)
-                # df = aggregate(pricing_data, rd_select,weather)
+            with st.spinner("Calculating Weather..."):
+                weather = all_weather(start_date, end_date, rd_select) 
+                df = aggregate(pricing_data, rd_select, weather) 
+                st.write(df)
 
                 # chart_data = df.loc[df['total cost'] != 0, ['RD', 'total cost', 'days over inch']]
 
