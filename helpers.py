@@ -33,14 +33,19 @@ def load_rd_data(exclude_region=None):
     rd_locs = {site:{'lat': lat, 'lng': lng, 'region': region} for site, lat, lng, region in rd_info.values}
     rds = rd_info['rd'].values.tolist()
     regions = rd_info['Region'].values.tolist()
-    return {'rd_loc_dict': rd_locs, 'rds': rds, 'regions':regions}
+
+    central_rds = rd_info[rd_info['Region'] == 'Central']['rd'].values.tolist()
+    north_rds = rd_info[rd_info['Region'] == 'North']['rd'].values.tolist()
+
+    return {'rd_loc_dict': rd_locs, 'rds': rds, 'regions':regions, 'central_rds': central_rds,'north_rds':north_rds}
+
 
 @st.cache_data
 def load_pricing_data():
     pricing = pd.read_csv('snow_removal_pricing.csv')
     pricing = pricing.applymap(lambda x: x.strip() if isinstance(x, str) else x)
     pricing = pricing.rename(columns=lambda x: x.strip())
-    pricing = pricing.replace('N/A', 'NaN').replace('$-', '0')
+    pricing = pricing.replace('N/A', '0').replace('$-', '0')
    
     pricing = pricing.astype({col: float for col in pricing.columns[2:16]})
 
@@ -49,43 +54,28 @@ def load_pricing_data():
     for _, row in inch_pricing.iterrows():
         site = row['RD']
         inch_dict = {col.strip('\"'): val for col, val in row.items() if col != 'RD'}
+        for key in inch_dict.keys():
+            if pd.isna(inch_dict[key]):
+                inch_dict[key] = inch_dict[prev_key]
+            else:
+                prev_key = key
+        inch_dict = pd.DataFrame(inch_dict, index=[0]).fillna(0).to_dict('records')[0]
         dict_list.append({site: inch_dict})
+  
     inch_pricing_dict = {k: v for d in dict_list for k, v in d.items()}
  
     pricing_dets = pricing[['RD', 'Salting', 'Flat Monthly Cost', 'Vendor', 'Notes']]
-    pricing_dets = {site:{'salt':salt, 'flat_cost': flat_cost, 'vendor': vendor, 'notes': notes} for site, salt,flat_cost,vendor,notes in pricing_dets.to_dict('split')['data']}
- 
+    pricing_dets = {site:{'salt':salt, 'flat_cost': flat_cost, 'vendor': vendor, 'notes': notes, 'flat': not math.isnan(flat_cost)} for site, salt,flat_cost,vendor,notes in pricing_dets.to_dict('split')['data']}
+
     return {'inch_pricing':inch_pricing_dict, 'pricing_dets': pricing_dets}
 
-@st.cache_data
-def flat_monthly_rates(site):
-    pricing_data = load_pricing_data()
-    if site in pricing_data['pricing_dets']:
-        flat = pricing_data['pricing_dets'][site]['flat_cost']
-        if not math.isnan(flat):
-            return True
-    return False
 
-    
+
 @st.cache_data
-def find_price(site, inch):
-    flat = flat_monthly_rates(site)
+def salt_price(site):
     pricing_data = load_pricing_data()
-    if flat == True:
-        return pricing_data['pricing_dets'][site]['flat_cost']
+    dets = pricing_data['pricing_dets']
+    if site in dets and 'salt' in dets[site]:
+        return dets[site]['salt']
     else:
-        inch_price = pricing_data['inch_pricing']
-        if site in inch_price and str(inch) in inch_price[site]:
-            return inch_price[site][str(inch)]
-        else:
-            return 0
-
-@st.cache_data
-def salt_price(site,inch):
-    if inch < 1:
         return 0
-    else:
-        pricing_data = load_pricing_data()
-        dets = pricing_data['pricing_dets']
-        salt = dets.get(site,{}).get('salt', 'N/A')
-        return salt 
