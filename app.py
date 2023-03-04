@@ -55,7 +55,7 @@ def find_price(site, inch, pricing_data):
         else:
             return 0
 # --- API function ---
-#@st.cache_data
+# @st.cache_data
 def grab_weather(start_date, end_date, rd_select, elements_select, rd_data):
     rd_locs = rd_data['rd_loc_dict']
     lat, lng = rd_locs[rd_select]['lat'], rd_locs[rd_select]['lng']
@@ -76,10 +76,11 @@ def grab_weather(start_date, end_date, rd_select, elements_select, rd_data):
             if v == e:
                 df_dict[k] = res['daily'][e]
 
-    return df_dict
+    return {rd_select: df_dict}
        
 @st.cache_data
 def add_pricing(weather_dict, rd_select):
+    print(weather_dict)
     inches_snow = [int(round(i,0)) for i in weather_dict[rd_select].get('snow', [])]
     data = {'date': weather_dict[rd_select].get('date', []), 'snow': weather_dict[rd_select].get('snow', []), 
             'rain': weather_dict[rd_select].get('rain', []),
@@ -98,13 +99,13 @@ def add_pricing(weather_dict, rd_select):
 
     return data
 
-#@st.cache_data
+@st.cache_data
 def all_weather(start_date, end_date, rds_select):
     weather = {}
     for site in rds_select: 
         print(site)
         weather_dict = grab_weather(start_date, end_date, site, 'snow', rd_data)
-        weather[site] = {'date': weather_dict['date'], 'snow': weather_dict['snow']}
+        weather[site]={'date': weather_dict[site]['date'], 'snow': weather_dict[site]['snow']}
 
     return weather 
 
@@ -121,7 +122,7 @@ def aggregate(pricing_data, rd_select, weather):
                 days_over_inch = sum(1 for snow in snow_data if snow > 1)
                 plow_cost = find_price(location, 1, pricing_data)  
                 total_cost = plow_cost
-                salt_cost = np.nan
+                salt_cost = days_over_inch * salt_price(location)
             # elif snow_data.isnull().any():
             #     days_over_inch = sum(1 for snow in snow_data if snow > 1)
             #     plow_cost = 0 #data['plow price'].sum()
@@ -195,8 +196,13 @@ if selected == "Individual RD Breakdown":
                 if snow:
                     st.snow() 
 
-                data = grab_weather(start_date, end_date, rd_select, elements_select, rd_data)
-                data = pd.DataFrame(data)
+                weather_data = grab_weather(start_date, end_date, rd_select, elements_select, rd_data)
+                # st.write(weather_data)
+                # new_data = {k: v for k, v in weather_data.values()}
+
+                # Create a DataFrame from the new dictionary
+                data = pd.DataFrame(weather_data[rd_select])
+
                 if 'snow' in elements_select:
                     chart_data = data[['date', 'snow']]
                     y_axis_label = 'Snowfall (in)'
@@ -210,7 +216,8 @@ if selected == "Individual RD Breakdown":
                     chart = (bars + line).interactive()
                     total_snow = data['snow'].sum()
                     total_snow = round(total_snow, 2)
-                    snow_dataframe = add_pricing(data, rd_select)
+                    
+                    snow_dataframe = add_pricing(weather_data, rd_select)
                     snow_dataframe = pd.DataFrame(snow_dataframe)
 
                     if pricing_data['pricing_dets'][rd_select]['flat']:
@@ -267,8 +274,6 @@ if selected == "Individual RD Breakdown":
                 st.markdown(f"The vendor is {vendor}.")
                 st.markdown(f"Additional Notes: {notes}.")
 
-                if st.button("Press if you want more snow"):
-                    st.snow()
             else: 
                 st.error("Invalid Password") 
                 st.markdown("Contact Holly if you're having password issues")
@@ -291,8 +296,6 @@ if selected == "Snowfall Summary":
             st.error('Error: Data is not available more recently than a week ago.')
         
         element_keys = {'snow': 'snowfall_sum', 'rain': 'rain_sum', 'high temp': 'temperature_2m_max', 'low temp': 'temperature_2m_min', 'hours of precipitation': 'precipitation_hours'}
-        # elements = {'snow', 'high temp', 'low temp', 'rain', 'hours of precipitation'}
-        # elements_selected = col2.multiselect("Select weather data type:", elements)
 
          # ----- SELECT RD -----    
         rd_data = load_rd_data(exclude_region=['South'])
@@ -310,7 +313,9 @@ if selected == "Snowfall Summary":
             rd_select = rd_data['central_rds']
         
         # -----INPUT PASSWORD-----
-        pc_password = st.text_input("Password") 
+        col4, col5, col6 = st.columns(3)
+        pc_password = col4.text_input("Password")  
+        note = col5.markdown("Note: API calls may take some time depending on # RDs selected and date range.")
 
         submitted = st.form_submit_button("Submit")
     
@@ -319,30 +324,45 @@ if selected == "Snowfall Summary":
         password_valid = password_authenticate(pc_password) 
         
         if password_valid:  
-            st.success('   Under Construction', icon="❄️")
+            st.success('Valid Password', icon="❄️")
             
             with st.spinner("Calculating Weather..."):
                 weather = all_weather(start_date, end_date, rd_select) 
+                # st.write(weather)
                 df = aggregate(pricing_data, rd_select, weather) 
-                st.write(df)
+                # st.write(df)
 
-                # chart_data = df.loc[df['total cost'] != 0, ['RD', 'total cost', 'days over inch']]
+                chart_data = df.loc[df['total cost'] != 0, ['RD', 'total cost', 'days over inch']]
 
 
-                # bars = alt.Chart(chart_data).mark_bar().encode(
-                #     x=alt.X('total cost:Q', axis=alt.Axis(title='Total Cost')),
-                #     y=alt.Y('RD:N', sort='-x'),
-                #     color = alt.Color('days over inch', scale=alt.Scale(scheme='tealblues'))
-                # )
-                # text = bars.mark_text(
-                #     align='left',
-                #     baseline='middle',
-                #     dx=3
-                # ).encode(
-                #     text = 'total cost:Q'
-                # )
-                # chart = (bars).properties(height=600)
-                # st.altair_chart(chart, use_container_width=True)
+                bars = alt.Chart(chart_data).mark_bar().encode(
+                    x=alt.X('total cost:Q', axis=alt.Axis(title='Total Cost')),
+                    y=alt.Y('RD:N', sort='-x'),
+                    color = alt.Color('days over inch', scale=alt.Scale(scheme='tealblues'))
+                )
+                text = bars.mark_text(
+                    align='left',
+                    baseline='middle',
+                    dx=3
+                ).encode(
+                    text = 'total cost:Q'
+                )
+                if len(rd_select) < 25:
+                    chart = (bars).properties()
+                else: 
+                    chart = (bars).properties(height = 700)
+                st.altair_chart(chart, use_container_width=True)
 
-                # table = st.dataframe(df,1000)
+                table = st.dataframe(df,1000)
+                download = df 
+
+                st.download_button(
+                    label='Download data',
+                    data=convert_df(download),
+                    file_name=f'{str(start_date)}_{str(end_date)}_plow_data.csv',
+                    mime='text/csv'
+                    )
+        else: 
+            st.error("Invalid Password") 
+            st.markdown("Contact Holly if you're having password issues")
 
