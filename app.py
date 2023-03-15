@@ -182,7 +182,7 @@ if selected == "Individual RD Breakdown":
         
         # -----INPUT PASSWORD-----
         col4, col5, col6 = st.columns(3)
-        pc_password = col4.text_input("Password") 
+        pc_password = col4.text_input("Password", type="password") 
         snow = col5.checkbox('More Snow?')
 
         submitted = st.form_submit_button("Submit")
@@ -314,7 +314,7 @@ if selected == "Snowfall Summary":
         
         # -----INPUT PASSWORD-----
         col4, col5, col6 = st.columns(3)
-        pc_password = col4.text_input("Password")  
+        pc_password = col4.text_input("Password", type = 'password')  
         note = col5.markdown("Note: API calls may take some time depending on # RDs selected and date range.")
 
         submitted = st.form_submit_button("Submit")
